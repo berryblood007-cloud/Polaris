@@ -6,25 +6,29 @@
     <title>Mon Grimoire Personnel</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Playfair+Display:ital,wght@0,400;1,700&display=swap" rel="stylesheet">
+
+    <!-- SCRIPTS FIREBASE (Indispensables pour la synchro) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 </head>
 <body>
 
     <h1>Mon Grimoire</h1>
 
     <nav>
-        <button class="btn-nav" onclick="filtrer('all')">Tout voir</button>
+        <button class="btn-nav" onclick="filtrer('all')">Tous les récits</button>
         <button class="btn-nav" onclick="filtrer('film')">Films</button>
         <button class="btn-nav" onclick="filtrer('serie')">Séries</button>
         <button class="btn-nav" onclick="filtrer('livre')">Livres</button>
         <button class="btn-nav" onclick="filtrer('webtoon')">Webtoons</button>
         
         <select class="select-filtre" onchange="filtrerParNote(this.value)">
-            <option value="tous">Toutes les notes</option>
-            <option value="5">★★★★★ (5)</option>
-            <option value="4.5">★★★★½ (4.5)</option>
-            <option value="4">★★★★ (4)</option>
-            <option value="3.5">★★★½ (3.5)</option>
-            <option value="3">★★★ (3)</option>
+            <option value="tous">Toutes les évalutions</option>
+            <option value="5">★★★★★ (Légendaire)</option>
+            <option value="4.5">★★★★½ (Épique)</option>
+            <option value="4">★★★★ (Remarquable)</option>
+            <option value="3.5">★★★½ (Notable)</option>
+            <option value="3">★★★ (Commun)</option>
         </select>
     </nav>
 
@@ -34,8 +38,8 @@
 
     <div id="modale">
         <div class="modale-contenu">
-            <h2 style="color:var(--or); font-family:var(--font-titre); margin-top:0;">Nouvelle Entrée</h2>
-            <input type="text" id="titre" placeholder="Titre de l'oeuvre">
+            <h2 style="color:var(--or); font-family:var(--font-titre); margin-top:0;">Nouvelle Inscription</h2>
+            <input type="text" id="titre" placeholder="Nom de l'oeuvre">
             <input type="file" id="fileImg" accept="image/*">
             <input type="text" id="urlImg" placeholder="Ou lien (URL) de l'image">
             <select id="cat">
@@ -44,35 +48,62 @@
                 <option value="livre">Livre</option>
                 <option value="webtoon">Webtoon</option>
             </select>
-            <input type="number" id="note" placeholder="Note (ex: 4.5)" step="0.5" min="0" max="5">
-            <button class="btn-or" onclick="preparerSauvegarde()">Inscrire au Grimoire</button>
-            <button onclick="fermerFormulaire()" style="background:none; color:grey; border:none; cursor:pointer;">Annuler</button>
+            <input type="number" id="note" placeholder="Note (0 à 5)" step="0.5" min="0" max="5">
+            <button class="btn-or" onclick="preparerSauvegarde()">Sceller au Grimoire</button>
+            <button onclick="fermerFormulaire()" style="background:none; color:#666; border:none; cursor:pointer; margin-top:10px;">Refermer</button>
         </div>
     </div>
 
     <script>
-        let data = JSON.parse(localStorage.getItem('grimoirePolarisV4')) || [];
+        // --- CONFIGURATION FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1psp27OyYo5gxbdudD1EXWRbizeSmXNs",
+            authDomain: "polaris-8f834.firebaseapp.com",
+            databaseURL: "https://polaris-8f834-default-rtdb.europe-west1.firebasedatabase.app", // URL standard Europe
+            projectId: "polaris-8f834",
+            storageBucket: "polaris-8f834.firebasestorage.app",
+            messagingSenderId: "164450497617",
+            appId: "1:164450497617:web:0af0503e574eac32fd7470"
+        };
+
+        // Initialisation de Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database().ref('oeuvres');
+
+        let dataOriginale = []; // Contiendra les données du cloud
         let catActuelle = 'all';
+
+        // --- SYNCHRONISATION EN TEMPS RÉEL ---
+        // Cette fonction s'exécute toute seule dès qu'une modif est faite sur PC ou Tablette
+        db.on('value', (snapshot) => {
+            const tempArray = [];
+            snapshot.forEach((childSnapshot) => {
+                tempArray.push({
+                    key: childSnapshot.key, // On garde la clé Firebase pour supprimer
+                    ...childSnapshot.val()
+                });
+            });
+            dataOriginale = tempArray;
+            filtrer(catActuelle); // Rafraîchit l'affichage
+        });
 
         function afficher(liste) {
             const gal = document.getElementById('galerie');
             gal.innerHTML = "";
-            liste.forEach((item, index) => {
+            liste.forEach((item) => {
                 const div = document.createElement('div');
                 div.className = 'carte';
                 div.onclick = (e) => {
                     if(e.target.className !== 'btn-supprimer') div.classList.toggle('active-note');
                 }
-
                 let etoiles = "★".repeat(Math.floor(item.note)) + (item.note % 1 !== 0 ? "½" : "");
-                
                 div.innerHTML = `
                     <img src="${item.image}">
                     <div class="overlay-note">
-                        <h2 style="font-family:var(--font-titre); color:var(--or-brillant);">${item.titre}</h2>
+                        <h2 style="font-family:var(--font-titre); color:var(--or-brillant); margin-bottom:5px;">${item.titre}</h2>
                         <div class="etoiles">${etoiles}</div>
-                        <p>${item.note} / 5</p>
-                        <button class="btn-supprimer" onclick="supprimer(${index})">Supprimer</button>
+                        <p style="margin:5px 0;">Note : ${item.note} / 5</p>
+                        <button class="btn-supprimer" onclick="supprimer('${item.key}')">Effacer</button>
                     </div>
                 `;
                 gal.appendChild(div);
@@ -82,51 +113,53 @@
         function preparerSauvegarde() {
             const file = document.getElementById('fileImg').files[0];
             const url = document.getElementById('urlImg').value;
-            
             if (file) {
                 const reader = new FileReader();
                 reader.onload = (e) => sauvegarder(e.target.result);
                 reader.readAsDataURL(file);
             } else {
-                sauvegarder(url || 'https://via.placeholder.com/220x330?text=Image');
+                sauvegarder(url || 'https://via.placeholder.com/300?text=Vide');
             }
         }
 
         function sauvegarder(imgSrc) {
-            const item = {
-                titre: document.getElementById('titre').value || "Sans titre",
+            const nouvelleOeuvre = {
+                titre: document.getElementById('titre').value || "Sans nom",
                 image: imgSrc,
                 categorie: document.getElementById('cat').value,
                 note: parseFloat(document.getElementById('note').value) || 0
             };
-            data.push(item);
-            localStorage.setItem('grimoirePolarisV4', JSON.stringify(data));
-            afficher(data);
+
+            // On envoie au Cloud (Firebase)
+            db.push(nouvelleOeuvre);
+
             fermerFormulaire();
+            // Reset des champs
+            document.getElementById('titre').value = "";
+            document.getElementById('urlImg').value = "";
+            document.getElementById('fileImg').value = "";
         }
 
-        function supprimer(i) {
-            if(confirm("Supprimer cette entrée ?")) {
-                data.splice(i, 1);
-                localStorage.setItem('grimoirePolarisV4', JSON.stringify(data));
-                filtrer(catActuelle);
+        function supprimer(key) {
+            if(confirm("Effacer ce souvenir de tous les appareils ?")) {
+                db.child(key).remove(); // Supprime dans le cloud
             }
         }
 
         function filtrer(c) {
             catActuelle = c;
-            afficher(c === 'all' ? data : data.filter(i => i.categorie === c));
+            const res = (c === 'all') ? dataOriginale : dataOriginale.filter(i => i.categorie === c);
+            afficher(res);
         }
 
         function filtrerParNote(n) {
-            let base = catActuelle === 'all' ? data : data.filter(i => i.categorie === catActuelle);
-            afficher(n === 'tous' ? base : base.filter(i => i.note == parseFloat(n)));
+            let base = (catActuelle === 'all') ? dataOriginale : dataOriginale.filter(i => i.categorie === catActuelle);
+            if (n === 'tous') afficher(base);
+            else afficher(base.filter(i => i.note == parseFloat(n)));
         }
 
         function ouvrirFormulaire() { document.getElementById('modale').style.display = 'flex'; }
         function fermerFormulaire() { document.getElementById('modale').style.display = 'none'; }
-
-        afficher(data);
     </script>
 </body>
 </html>
